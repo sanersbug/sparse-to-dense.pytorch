@@ -1,4 +1,6 @@
 import os
+
+import cv2
 import torch
 import shutil
 import numpy as np
@@ -145,5 +147,6 @@ def strentch_img(pred):
     depth_pred_cpu = np.squeeze(pred.data.cpu().numpy())
     d_min = np.min(depth_pred_cpu)
     d_max = np.max(depth_pred_cpu)
+    depth_pred_cpu = cv2.resize(depth_pred_cpu, (1280, 720))
     depth_pred_col = colored_depthmap(depth_pred_cpu, d_min, d_max)
     return depth_pred_col

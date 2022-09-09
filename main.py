@@ -13,6 +13,7 @@ from metrics import AverageMeter, Result
 from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo
 import criteria
 import utils
+from PIL import Image
 
 args = utils.parse_command()
 print(args)
@@ -324,21 +325,25 @@ def validate(val_loader, model, epoch, write_to_file=True):
 def test(test_loader, model, save_path):
     average_meter = AverageMeter()
     model.eval() # switch to evaluate mode
-    end = time.time()
     for i, (input, target) in enumerate(test_loader):
         input, name = input.cuda(), target
         torch.cuda.synchronize()
-        data_time = time.time() - end
 
         # compute output
         end = time.time()
         with torch.no_grad():
             pred = model(input)
+
         torch.cuda.synchronize()
-        gpu_time = time.time() - end
-        pred = utils.strentch_img(pred)
+        pred1 = utils.strentch_img(pred)
         save_to_file = os.path.join(save_path, name[0] + '.png')
-        utils.save_image(pred, save_to_file)
+        utils.save_image(pred1, save_to_file)
+
+        save_to_tif = os.path.join(save_path, name[0] + '_ori.tiff')
+        depth_pred_cpu = np.squeeze(pred.data.cpu().numpy())
+        img = Image.fromarray(depth_pred_cpu)
+        img = img.resize((1280, 720))
+        img.save(save_to_tif)
 
 
 if __name__ == '__main__':
