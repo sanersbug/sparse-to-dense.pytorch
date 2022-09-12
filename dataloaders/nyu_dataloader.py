@@ -39,6 +39,7 @@ class NYUDataset(MyDataloader):
         rgb_np = transform(rgb)
         rgb_np = np.asfarray(rgb_np, dtype='float') / 255
         depth_np = transform(depth_np)
+        return rgb_np, depth_np
 
     def test_transform(self, rgb, depth):
         depth_np = depth
