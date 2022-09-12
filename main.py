@@ -15,6 +15,7 @@ import criteria
 import utils
 from PIL import Image
 
+torch.nn.Module.dump_patches = True
 args = utils.parse_command()
 print(args)
 
@@ -29,12 +30,10 @@ def create_data_loaders(args):
     print("=> creating data loaders ...")
     traindir = os.path.join('data', args.data, 'train')
     valdir = os.path.join('data', args.data, 'val')
-
     testdir = os.path.join('data', args.data, 'test')
 
     train_loader = None
     val_loader = None
-
     test_loader = None
 
 
@@ -48,14 +47,23 @@ def create_data_loaders(args):
 
     if args.data == 'nyudepthv2':
         from dataloaders.nyu_dataloader import NYUDataset
-        if not args.evaluate:
+        if args.evaluate:
+            val_dataset = NYUDataset(valdir, type='val',
+                modality=args.modality, sparsifier=sparsifier)
+            # set batch size to be 1 for validation
+            val_loader = torch.utils.data.DataLoader(val_dataset,
+                                                     batch_size=1, shuffle=False, num_workers=args.workers,
+                                                     pin_memory=True)
+        elif args.test:
+            test_dataset = NYUDataset(testdir, type='test',
+                                     modality=args.modality, sparsifier=sparsifier)
+
+            test_loader = torch.utils.data.DataLoader(test_dataset,
+                                                      batch_size=1, shuffle=False, num_workers=args.workers,
+                                                      pin_memory=True)
+        else:
             train_dataset = NYUDataset(traindir, type='train',
                 modality=args.modality, sparsifier=sparsifier)
-        val_dataset = NYUDataset(valdir, type='val',
-            modality=args.modality, sparsifier=sparsifier)
-
-        test_dataset = NYUDataset(testdir, type='test',
-                                 modality=args.modality, sparsifier=sparsifier)
 
     elif args.data == 'kitti':
         from dataloaders.kitti_dataloader import KITTIDataset
@@ -65,19 +73,18 @@ def create_data_loaders(args):
         val_dataset = KITTIDataset(valdir, type='val',
             modality=args.modality, sparsifier=sparsifier)
 
+        # set batch size to be 1 for validation
+        val_loader = torch.utils.data.DataLoader(val_dataset,
+                                                 batch_size=1, shuffle=False, num_workers=args.workers,
+                                                 pin_memory=True)
+
     else:
         raise RuntimeError('Dataset not found.' +
                            'The dataset must be either of nyudepthv2 or kitti.')
 
-    # set batch size to be 1 for validation
-    val_loader = torch.utils.data.DataLoader(val_dataset,
-        batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
-
-    test_loader = torch.utils.data.DataLoader(test_dataset,
-        batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
 
     # put construction of train loader here, for those who are interested in testing only
-    if not args.evaluate:
+    if not args.evaluate and not args.test:
         train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size, shuffle=True,
             num_workers=args.workers, pin_memory=True, sampler=None,
@@ -104,12 +111,25 @@ def main():
         best_result = checkpoint['best_result']
         model = checkpoint['model']
         print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
-        # _, val_loader = create_data_loaders(args)
-        # args.evaluate = True
-        # validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
-
-        _, _, test_loader = create_data_loaders(args)
+        args.test = ''
         args.evaluate = True
+        _, val_loader, _ = create_data_loaders(args)
+        validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
+        return
+
+    elif args.test:
+        assert os.path.isfile(args.test), \
+        "=> no best model found at '{}'".format(args.test)
+        print("=> loading best model '{}'".format(args.test))
+        checkpoint = torch.load(args.test)
+        output_directory = os.path.dirname(args.test)
+        args = checkpoint['args']
+        start_epoch = checkpoint['epoch'] + 1
+        best_result = checkpoint['best_result']
+        model = checkpoint['model']
+        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+        args.test = True
+        _, _, test_loader = create_data_loaders(args)
         test(test_loader, model, test_save_path)
         return
 
